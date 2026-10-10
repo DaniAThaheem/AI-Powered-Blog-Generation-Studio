@@ -140,6 +140,9 @@ export const SettingsView: React.FC = () => {
                 <div>
                   <h4 className="text-xs font-semibold text-text-primary">Pinecone Vector DB</h4>
                   <p className="text-[10px] text-text-muted font-mono">{settings?.providers?.pinecone?.index_name || 'blog-rag'}</p>
+                  {providers?.pinecone?.warning && (
+                    <p className="text-[10px] text-amber-400/90 font-mono mt-0.5">{providers.pinecone.warning}</p>
+                  )}
                 </div>
               </div>
               <span

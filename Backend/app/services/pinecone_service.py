@@ -19,6 +19,8 @@ class PineconeService:
         self.namespace_prefix = settings.PINECONE_NAMESPACE_PREFIX
         self._index = None
         self._configured = False
+        self.index_exists: Optional[bool] = None
+        self.warning: Optional[str] = None
         
         # In-memory vector store fallback
         self._local_vectors: Dict[str, Dict[str, Any]] = {}
@@ -35,15 +37,23 @@ class PineconeService:
                 if self.index_name in existing_indexes:
                     self._index = pc.Index(self.index_name)
                     self._configured = True
+                    self.index_exists = True
+                    self.warning = None
                     logger.info(f"Connected to Pinecone index: {self.index_name}")
                 else:
-                    logger.warning(f"Pinecone index '{self.index_name}' does not exist. Using local vector fallback.")
+                    self.index_exists = False
                     self._configured = False
+                    self.warning = f"Pinecone index '{self.index_name}' does not exist. Using local vector store fallback."
+                    logger.warning(self.warning)
             except Exception as e:
-                logger.warning(f"Failed to connect to Pinecone ({e}). Using local vector fallback.")
+                self.index_exists = False
                 self._configured = False
+                self.warning = f"Failed to connect to Pinecone ({e}). Using local vector store fallback."
+                logger.warning(self.warning)
         else:
+            self.index_exists = None
             self._configured = False
+            self.warning = None
 
     @property
     def is_configured(self) -> bool:

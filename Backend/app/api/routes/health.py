@@ -37,7 +37,9 @@ async def get_health(db: AsyncSession = Depends(get_db)):
             },
             "pinecone": {
                 "configured": pinecone_service.is_configured,
-                "index_name": settings.PINECONE_INDEX_NAME
+                "index_name": settings.PINECONE_INDEX_NAME,
+                "index_exists": pinecone_service.index_exists,
+                "warning": pinecone_service.warning
             },
             "cloudinary": {
                 "configured": cloudinary_service.is_configured,

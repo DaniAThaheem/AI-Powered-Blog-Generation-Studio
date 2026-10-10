@@ -1,0 +1,45 @@
+# Python / Virtual Environment
+Backend/.venv/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# Testing & Cache
+.pytest_cache/
+Backend/.pytest_cache/
+.coverage
+
+# Databases
+blog_studio.db
+Backend/blog_studio.db
+*.db
+*.sqlite3
+
+# Local Storage
+Backend/storage/documents/*
+!Backend/storage/documents/.gitkeep
+Backend/storage/images/*
+!Backend/storage/images/.gitkeep
+
+storage/documents/*
+!storage/documents/.gitkeep
+storage/images/*
+!storage/images/.gitkeep
+
+# Node / Frontend
+Frontend/node_modules/
+Frontend/dist/
+Frontend/.vite/
+
+# Environment files
+.env
+.env.*
+Backend/.env
+Frontend/.env
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

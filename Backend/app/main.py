@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import os
+import asyncio
 
 from app.config import settings
 from app.core.logging import setup_logging, logger
@@ -23,6 +24,11 @@ async def lifespan(app: FastAPI):
     await init_db()
     from app.services.generation_runner import generation_runner
     await generation_runner.cleanup_orphaned_generations()
+    from app.services.document_service import document_service
+    asyncio.create_task(document_service.reindex_all_documents())
+    from app.services.pinecone_service import pinecone_service
+    if pinecone_service.warning:
+        logger.warning(f"Pinecone startup warning: {pinecone_service.warning}")
     yield
     # Shutdown
     logger.info("Shutting down backend...")

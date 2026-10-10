@@ -31,7 +31,9 @@ async def get_settings():
             "pinecone": {
                 "name": "Pinecone Vector DB",
                 "configured": pinecone_service.is_configured,
-                "index_name": settings.PINECONE_INDEX_NAME
+                "index_name": settings.PINECONE_INDEX_NAME,
+                "index_exists": pinecone_service.index_exists,
+                "warning": pinecone_service.warning
             },
             "cloudinary": {
                 "name": "Cloudinary Media",

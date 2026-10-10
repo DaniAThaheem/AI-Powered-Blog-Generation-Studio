@@ -141,23 +141,28 @@ class DocumentService:
             db.add(c)
         await db.commit()
 
-        # 5. Embed and Index into Pinecone
+        # 5. Embed and Index into Pinecone / local store
         doc_record.status = "indexing"
         await db.commit()
 
         try:
-            # Generate embeddings
+            # Generate embeddings without mixing spaces
             vectors_to_upsert = []
             if gemini_service.is_configured:
+                embed_client = gemini_service.get_embeddings()
+                texts = [rc["text"] for rc in raw_chunks]
                 try:
-                    embed_client = gemini_service.get_embeddings()
-                    texts = [rc["text"] for rc in raw_chunks]
                     embeddings = embed_client.embed_documents(texts)
+                    doc_record.embedding_model = settings.GEMINI_EMBEDDING_MODEL
                 except Exception as embed_err:
-                    logger.warning(f"Gemini embedding failed ({embed_err}), using fallback embeddings")
-                    embeddings = [generate_fallback_embedding(rc["text"]) for rc in raw_chunks]
+                    logger.error(f"Gemini embedding failed for document {doc_id}: {embed_err}")
+                    doc_record.status = "failed"
+                    doc_record.error_message = f"Gemini embedding failed: {str(embed_err)} (retryable)"
+                    await db.commit()
+                    return doc_record
             else:
                 embeddings = [generate_fallback_embedding(rc["text"]) for rc in raw_chunks]
+                doc_record.embedding_model = "fallback_hash"
 
             for rc, emb in zip(raw_chunks, embeddings):
                 vectors_to_upsert.append({
@@ -169,7 +174,7 @@ class DocumentService:
             pinecone_service.upsert_chunks(vectors_to_upsert)
             doc_record.status = "ready"
             await db.commit()
-            logger.info(f"Document {original_filename} ({doc_id}) indexed successfully with {len(raw_chunks)} chunks")
+            logger.info(f"Document {original_filename} ({doc_id}) indexed successfully with {len(raw_chunks)} chunks using {doc_record.embedding_model}")
         except Exception as e:
             logger.error(f"Failed to index document {doc_id}: {e}")
             doc_record.status = "failed"
@@ -207,18 +212,22 @@ class DocumentService:
         )
 
         results = []
+        if not matches:
+            return results
+
+        # Single batch query to avoid N+1 queries
+        chunk_text_map: Dict[str, str] = {}
+        if db:
+            matched_ids = [m["id"] for m in matches]
+            stmt = select(DocumentChunkModel).where(DocumentChunkModel.id.in_(matched_ids))
+            chunk_rows = (await db.execute(stmt)).scalars().all()
+            chunk_text_map = {row.id: row.text_content for row in chunk_rows}
+
         for m in matches:
             chunk_id = m["id"]
             meta = m.get("metadata", {})
             score = m.get("score", 0.0)
-
-            # If db is available, load full text content
-            text_content = meta.get("text_preview", "")
-            if db:
-                stmt = select(DocumentChunkModel).where(DocumentChunkModel.id == chunk_id)
-                chunk_row = (await db.execute(stmt)).scalars().first()
-                if chunk_row:
-                    text_content = chunk_row.text_content
+            text_content = chunk_text_map.get(chunk_id, meta.get("text_preview", ""))
 
             results.append({
                 "chunk_id": chunk_id,
@@ -230,5 +239,56 @@ class DocumentService:
             })
 
         return results
+
+    async def reindex_all_documents(self):
+        """Re-index chunks for ready documents into in-memory vector store on startup."""
+        if pinecone_service.is_configured:
+            return  # Remote Pinecone already persists vectors
+
+        try:
+            from app.db.session import AsyncSessionLocal
+            logger.info("Starting background re-indexing of documents into local vector store...")
+            async with AsyncSessionLocal() as db:
+                stmt = select(DocumentModel).where(DocumentModel.status == "ready")
+                ready_docs = (await db.execute(stmt)).scalars().all()
+                if not ready_docs:
+                    logger.info("No ready documents to re-index")
+                    return
+
+                doc_map = {doc.id: doc for doc in ready_docs}
+                chunk_stmt = select(DocumentChunkModel).where(DocumentChunkModel.document_id.in_(list(doc_map.keys())))
+                chunks = (await db.execute(chunk_stmt)).scalars().all()
+
+                if not chunks:
+                    return
+
+                vectors_to_upsert = []
+                for chunk in chunks:
+                    doc = doc_map.get(chunk.document_id)
+                    embedder = getattr(doc, "embedding_model", None)
+                    if gemini_service.is_configured and embedder and embedder != "fallback_hash":
+                        try:
+                            emb = gemini_service.get_embeddings().embed_query(chunk.text_content)
+                        except Exception:
+                            emb = generate_fallback_embedding(chunk.text_content)
+                    else:
+                        emb = generate_fallback_embedding(chunk.text_content)
+
+                    vectors_to_upsert.append({
+                        "id": chunk.id,
+                        "values": emb,
+                        "metadata": chunk.metadata_json or {
+                            "document_id": chunk.document_id,
+                            "filename": getattr(doc, "filename", "document"),
+                            "chunk_index": chunk.chunk_index,
+                            "page_number": chunk.page_number,
+                            "text_preview": chunk.text_content[:150]
+                        }
+                    })
+
+                pinecone_service.upsert_chunks(vectors_to_upsert)
+                logger.info(f"Re-indexed {len(vectors_to_upsert)} chunks from {len(ready_docs)} ready document(s) in background.")
+        except Exception as e:
+            logger.error(f"Error during background re-indexing: {e}")
 
 document_service = DocumentService()

@@ -169,7 +169,7 @@ export interface HealthResponse {
   services: {
     gemini: { configured: boolean; text_model: string; image_model: string };
     tavily: { configured: boolean };
-    pinecone: { configured: boolean; index_name: string };
+    pinecone: { configured: boolean; index_name: string; index_exists?: boolean | null; warning?: string | null };
     cloudinary: { configured: boolean; cloud_name?: string | null };
   };
 }
@@ -186,7 +186,7 @@ export interface SettingsResponse {
   providers: {
     gemini: { name: string; configured: boolean };
     tavily: { name: string; configured: boolean };
-    pinecone: { name: string; configured: boolean; index_name: string };
+    pinecone: { name: string; configured: boolean; index_name: string; index_exists?: boolean | null; warning?: string | null };
     cloudinary: { name: string; configured: boolean };
     database: { name: string; type: string };
   };

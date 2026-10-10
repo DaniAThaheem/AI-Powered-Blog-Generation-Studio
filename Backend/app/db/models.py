@@ -1,6 +1,7 @@
 import datetime
 from sqlalchemy import Column, String, Integer, Text, Boolean, DateTime, JSON, ForeignKey
 from sqlalchemy.orm import relationship
+from sqlalchemy.ext.mutable import MutableDict, MutableList
 from app.db.session import Base
 import uuid
 
@@ -23,16 +24,16 @@ class GenerationModel(Base):
     
     status = Column(String(50), default="queued", index=True)  # queued, running, interrupted, completed, failed, cancelled
     current_stage = Column(String(100), default="queued")
-    stage_statuses = Column(JSON, default=dict)  # {"router": "completed", ...}
+    stage_statuses = Column(MutableDict.as_mutable(JSON), default=dict)  # {"router": "completed", ...}
     
-    selected_document_ids = Column(JSON, default=list)
-    plan = Column(JSON, nullable=True)
-    sections = Column(JSON, default=list)
+    selected_document_ids = Column(MutableList.as_mutable(JSON), default=list)
+    plan = Column(MutableDict.as_mutable(JSON), nullable=True)
+    sections = Column(MutableList.as_mutable(JSON), default=list)
     final_markdown = Column(Text, nullable=True)
-    evidence = Column(JSON, default=list)
-    document_chunks_used = Column(JSON, default=list)
-    image_specs = Column(JSON, default=list)
-    warnings = Column(JSON, default=list)
+    evidence = Column(MutableList.as_mutable(JSON), default=list)
+    document_chunks_used = Column(MutableList.as_mutable(JSON), default=list)
+    image_specs = Column(MutableList.as_mutable(JSON), default=list)
+    warnings = Column(MutableList.as_mutable(JSON), default=list)
     error_message = Column(Text, nullable=True)
     
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
@@ -53,6 +54,7 @@ class DocumentModel(Base):
     cloudinary_public_id = Column(String(255), nullable=True)
     
     status = Column(String(50), default="uploaded", index=True) # uploaded, extracting, chunking, indexing, ready, failed
+    embedding_model = Column(String(100), nullable=True, default="fallback_hash")
     chunk_count = Column(Integer, default=0)
     extracted_text_preview = Column(Text, nullable=True)
     error_message = Column(Text, nullable=True)
@@ -70,7 +72,7 @@ class DocumentChunkModel(Base):
     chunk_index = Column(Integer, nullable=False)
     page_number = Column(Integer, nullable=True)
     text_content = Column(Text, nullable=False)
-    metadata_json = Column(JSON, default=dict)
+    metadata_json = Column(MutableDict.as_mutable(JSON), default=dict)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     document = relationship("DocumentModel", back_populates="chunks")

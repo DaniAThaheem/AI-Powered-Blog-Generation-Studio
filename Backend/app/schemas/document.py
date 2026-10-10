@@ -20,6 +20,7 @@ class DocumentResponse(BaseModel):
     storage_path: str
     cloudinary_url: Optional[str] = None
     status: str
+    embedding_model: Optional[str] = None
     chunk_count: int
     extracted_text_preview: Optional[str] = None
     error_message: Optional[str] = None

@@ -4,6 +4,7 @@ from app.workflows.prompts import ORCHESTRATOR_SYS_PROMPT
 from app.services.gemini_service import gemini_service
 from app.core.logging import logger
 from langgraph.types import interrupt
+from langgraph.errors import GraphInterrupt
 
 def orchestratorNode(state: WorkflowState) -> Dict[str, Any]:
     """Generate structured blog plan with ordered sections."""
@@ -91,20 +92,23 @@ def orchestratorNode(state: WorkflowState) -> Dict[str, Any]:
         # Optional Human-In-The-Loop approval
         if enable_hitl:
             logger.info("Human-in-the-loop enabled: interrupting for plan approval")
-            try:
-                decision = interrupt({
-                    "type": "plan_approval",
-                    "message": f"Review and approve blog plan: '{plan.blog_title}'",
-                    "plan": plan.model_dump()
-                })
-                if decision and isinstance(decision, dict) and "plan" in decision:
-                    # If human edited or supplied an updated plan
+            decision = interrupt({
+                "type": "plan_approval",
+                "message": f"Review and approve blog plan: '{plan.blog_title}'",
+                "plan": plan.model_dump()
+            })
+            if decision and isinstance(decision, dict):
+                if "plan" in decision:
+                    # If human edited or supplied an updated plan wrapped in {"plan": ...}
                     plan = Plan(**decision["plan"])
-            except Exception as hitl_err:
-                logger.warning(f"HITL interrupt skipped outside running graph: {hitl_err}")
+                elif "blog_title" in decision and "tasks" in decision:
+                    # If human supplied the plan dict directly
+                    plan = Plan(**decision)
 
         return {"plan": plan.model_dump()}
 
+    except GraphInterrupt:
+        raise
     except Exception as e:
         logger.error(f"Orchestrator node failed: {e}")
         raise

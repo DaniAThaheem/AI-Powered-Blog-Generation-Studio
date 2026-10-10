@@ -43,11 +43,13 @@ async def test_generation_request_validation(async_client: AsyncClient, monkeypa
     mock_execute.assert_called_once()
 
 @pytest.mark.asyncio
-async def test_enable_hitl_temporary_guard(async_client: AsyncClient):
-    """Verify that enable_hitl=True returns a clear 400 rejection in Phase 1."""
+async def test_enable_hitl_creates_generation(async_client: AsyncClient, monkeypatch):
+    """Verify that enable_hitl=True succeeds and enqueues generation in Phase 2."""
+    mock_execute = AsyncMock()
+    monkeypatch.setattr(gen_routes.generation_runner, "execute_generation", mock_execute)
     res = await async_client.post("/api/generations", json={
         "topic": "Event-Driven Microservices Architecture",
         "enable_hitl": True
     })
-    assert res.status_code == 400
-    assert "Human-in-the-loop" in res.json()["detail"]
+    assert res.status_code == 201
+    assert res.json()["enable_hitl"] is True

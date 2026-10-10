@@ -21,6 +21,8 @@ async def lifespan(app: FastAPI):
     setup_logging()
     logger.info(f"Starting {settings.PROJECT_NAME} backend...")
     await init_db()
+    from app.services.generation_runner import generation_runner
+    await generation_runner.cleanup_orphaned_generations()
     yield
     # Shutdown
     logger.info("Shutting down backend...")

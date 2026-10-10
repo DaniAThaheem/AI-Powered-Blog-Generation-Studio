@@ -28,12 +28,6 @@ async def create_generation(
     db: AsyncSession = Depends(get_db)
 ):
     """Start a new blog generation workflow."""
-    if req.enable_hitl:
-        raise HTTPException(
-            status_code=400,
-            detail="Human-in-the-loop (HITL) mode is temporarily unavailable until Phase 2 compiled graph execution is enabled."
-        )
-
     generation_id = str(uuid.uuid4())
     thread_id = f"thread_{generation_id}"
 
@@ -237,6 +231,6 @@ async def resume_generation(
     await db.commit()
     await db.refresh(gen)
 
-    # Continue execution
-    background_tasks.add_task(generation_runner.execute_generation, generation_id)
+    # Continue execution from checkpoint with resume decision
+    background_tasks.add_task(generation_runner.execute_generation, generation_id, req.decision)
     return gen

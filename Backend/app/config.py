@@ -20,9 +20,9 @@ class Settings(BaseSettings):
 
     # Google Gemini
     GOOGLE_API_KEY: Optional[str] = Field(default=None, description="Google AI Studio API key")
-    GEMINI_TEXT_MODEL: str = Field(default="gemini-1.5-flash", description="Gemini text generation model")
-    GEMINI_IMAGE_MODEL: str = Field(default="imagen-3.0-generate-002", description="Image generation model")
-    GEMINI_EMBEDDING_MODEL: str = Field(default="models/text-embedding-004", description="Embedding model")
+    GEMINI_TEXT_MODEL: str = Field(default="gemini-2.5-flash", description="Gemini text generation model")
+    GEMINI_IMAGE_MODEL: str = Field(default="gemini-3.1-flash-image", description="Image generation model")
+    GEMINI_EMBEDDING_MODEL: str = Field(default="models/gemini-embedding-2", description="Embedding model")
 
     # Tavily Web Search
     TAVILY_API_KEY: Optional[str] = Field(default=None, description="Tavily API key for web research")

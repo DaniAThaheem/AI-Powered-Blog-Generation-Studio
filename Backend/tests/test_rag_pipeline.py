@@ -12,7 +12,8 @@ def test_split_text_into_chunks():
         assert len(c) <= 300
 
 def test_rag_vector_metadata_and_filtering():
-    """Verify that vector retrieval strictly respects document_id filtering."""
+    """Verify that vector retrieval strictly respects document_id filtering without hitting external Pinecone."""
+    assert not pinecone_service.is_configured, "Test must run in offline/local fallback mode"
     doc_a_id = "doc_alpha_123"
     doc_b_id = "doc_beta_456"
 

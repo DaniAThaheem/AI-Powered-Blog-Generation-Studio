@@ -91,14 +91,17 @@ def orchestratorNode(state: WorkflowState) -> Dict[str, Any]:
         # Optional Human-In-The-Loop approval
         if enable_hitl:
             logger.info("Human-in-the-loop enabled: interrupting for plan approval")
-            decision = interrupt({
-                "type": "plan_approval",
-                "message": f"Review and approve blog plan: '{plan.blog_title}'",
-                "plan": plan.model_dump()
-            })
-            if decision and isinstance(decision, dict) and "plan" in decision:
-                # If human edited or supplied an updated plan
-                plan = Plan(**decision["plan"])
+            try:
+                decision = interrupt({
+                    "type": "plan_approval",
+                    "message": f"Review and approve blog plan: '{plan.blog_title}'",
+                    "plan": plan.model_dump()
+                })
+                if decision and isinstance(decision, dict) and "plan" in decision:
+                    # If human edited or supplied an updated plan
+                    plan = Plan(**decision["plan"])
+            except Exception as hitl_err:
+                logger.warning(f"HITL interrupt skipped outside running graph: {hitl_err}")
 
         return {"plan": plan.model_dump()}
 

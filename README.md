@@ -126,8 +126,9 @@ Copy `backend/.env.example` to `backend/.env` and fill in your credentials.
 ```env
 # ── Required for AI features ──────────────────────────────────────
 GOOGLE_API_KEY=your_google_api_key_here
-GEMINI_TEXT_MODEL=gemini-1.5-flash          # or gemini-1.5-pro
-GEMINI_IMAGE_MODEL=imagen-3.0-generate-002  # Imagen 3 via Gemini API
+GEMINI_TEXT_MODEL=gemini-2.5-flash          # or gemini-2.5-pro
+GEMINI_IMAGE_MODEL=gemini-3.1-flash-image   # Nano / Flash image via Gemini API
+GEMINI_EMBEDDING_MODEL=models/gemini-embedding-2
 
 # ── Required for web research ─────────────────────────────────────
 TAVILY_API_KEY=your_tavily_api_key_here
@@ -307,7 +308,7 @@ The architecture diagrams reference **Chroma** as the vector store. The implemen
 The compiled LangGraph blog graph (`blog_graph.py`) exists and is correct, but `generation_runner.py` executes nodes sequentially in an async background task (not via `astream()`). This was a pragmatic choice to enable fine-grained SSE stage broadcasting per node. The fan-out workers still run concurrently via `asyncio.gather`.
 
 ### Gemini Image Generation Model
-The original script used `"gemini-3.1-flash-image"` which is not a valid model name. The implementation uses `imagen-3.0-generate-002` (Imagen 3 via the Gemini API). This is configurable via the `GEMINI_IMAGE_MODEL` environment variable.
+The application uses `gemini-3.1-flash-image` as the default image generation model via the Gemini API (`response_modalities=["IMAGE"]`). This is configurable via the `GEMINI_IMAGE_MODEL` environment variable.
 
 ### State Reducer Fix
 The original `bwa.py` had `sections: Annotated[List[List[tuple[int, str]]], operator.add]` with workers returning `{"sections": [(task.id, section_md.text)]}`. This was corrected to use `List[Dict[str, Any]]` with structured `{id, title, content}` dicts, which the merge node sorts by `id` for deterministic ordering regardless of worker completion order.

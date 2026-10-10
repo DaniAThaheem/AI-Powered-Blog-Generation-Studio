@@ -116,7 +116,7 @@ class GenerationRunner:
         try:
             # 1. ANALYZE TOPIC
             await self._update_stage(generation_id, "analyze_topic", "running", "Analyzing topic and determining research strategy...")
-            router_res = routerNode(state)
+            router_res = await asyncio.to_thread(routerNode, state)
             state["needs_research"] = router_res.get("needs_research", False)
             state["mode"] = router_res.get("mode", "closed_book")
             state["queries"] = router_res.get("queries", [])
@@ -128,7 +128,7 @@ class GenerationRunner:
             # 2. RESEARCH (Conditional)
             if state["needs_research"]:
                 await self._update_stage(generation_id, "research", "running", f"Searching Tavily for {len(state['queries'])} queries...")
-                research_res = researchNode(state)
+                research_res = await asyncio.to_thread(researchNode, state)
                 state["evidence"] = research_res.get("evidence", [])
                 if "warnings" in research_res:
                     state["warnings"].extend(research_res["warnings"])
@@ -157,8 +157,10 @@ class GenerationRunner:
                     state["warnings"].append(f"RAG document retrieval warning: {str(rag_err)}")
 
             # 3. PLAN
+            if state.get("enable_hitl"):
+                state["warnings"].append("Human-in-the-loop approval was requested but is temporarily bypassed until Phase 2 compiled graph execution.")
             await self._update_stage(generation_id, "plan", "running", "Creating detailed blog outline and section plan...")
-            orchestrator_res = orchestratorNode(state)
+            orchestrator_res = await asyncio.to_thread(orchestratorNode, state)
             state["plan"] = orchestrator_res.get("plan")
             plan_title = state["plan"].get("blog_title") if state["plan"] else state["topic"]
             await self._update_stage(
@@ -174,9 +176,8 @@ class GenerationRunner:
             worker_results = []
             
             # Execute workers concurrently
-            loop = asyncio.get_event_loop()
             futures = [
-                loop.run_in_executor(None, workerNode, send.node_input)
+                asyncio.to_thread(workerNode, send.arg)
                 for send in sends
             ]
             completed_workers = await asyncio.gather(*futures, return_exceptions=True)
@@ -203,7 +204,7 @@ class GenerationRunner:
 
             # 6. PLAN IMAGES
             await self._update_stage(generation_id, "plan_images", "running", "Evaluating need for architecture diagrams and figures...")
-            img_plan_res = imageDeciderNode(state)
+            img_plan_res = await asyncio.to_thread(imageDeciderNode, state)
             state["md_with_placeholders"] = img_plan_res.get("md_with_placeholders", state["merged_md"])
             state["image_specs"] = img_plan_res.get("image_specs", [])
             await self._update_stage(
@@ -217,8 +218,7 @@ class GenerationRunner:
                     generation_id, "generate_images", "running",
                     f"Generating and uploading {len(state['image_specs'])} images..."
                 )
-                loop = asyncio.get_event_loop()
-                img_gen_res = await loop.run_in_executor(None, gNpImagePlace, state)
+                img_gen_res = await asyncio.to_thread(gNpImagePlace, state)
                 state["final"] = img_gen_res.get("final", state["merged_md"])
                 state["image_specs"] = img_gen_res.get("image_specs", state["image_specs"])
                 if "warnings" in img_gen_res:
@@ -247,8 +247,9 @@ class GenerationRunner:
                     gen_rec.image_specs = state["image_specs"]
                     gen_rec.warnings = state["warnings"]
                     gen_rec.status = "completed"
-                    gen_rec.current_stage = "completed"
-                    gen_rec.stage_statuses["save"] = "completed"
+                    statuses = dict(gen_rec.stage_statuses or {})
+                    statuses["save"] = "completed"
+                    gen_rec.stage_statuses = statuses
 
                     # Save media asset records
                     for spec in state["image_specs"]:
@@ -268,6 +269,13 @@ class GenerationRunner:
                     await db.commit()
 
             await self._update_stage(generation_id, "save", "completed", "Blog generated and saved successfully")
+            
+            async with AsyncSessionLocal() as db:
+                stmt = select(GenerationModel).where(GenerationModel.id == generation_id)
+                gen_rec = (await db.execute(stmt)).scalars().first()
+                if gen_rec:
+                    gen_rec.current_stage = "completed"
+                    await db.commit()
             
             # Broadcast completed event
             await self.broadcast_event(WorkflowEvent(

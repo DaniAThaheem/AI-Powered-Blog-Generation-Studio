@@ -8,31 +8,31 @@ A full-stack web application that transforms a LangGraph multi-agent workflow in
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        React Frontend                            │
+│                        React Frontend                           │
 │   Vite · TypeScript · Tailwind CSS · React Router · TanStack    │
-│                  http://localhost:5173                           │
+│                  http://localhost:5173                          │
 └──────────────────────────┬──────────────────────────────────────┘
                            │ REST + SSE
-┌──────────────────────────▼──────────────────────────────────────┐
+┌──────────────────────────▼──────────────────────────────────────-┐
 │                       FastAPI Backend                            │
 │                  http://localhost:8000                           │
 │                                                                  │
-│  ┌─────────────┐  ┌────────────────┐  ┌──────────────────────┐ │
-│  │  REST API   │  │   SSE Stream   │  │  Background Executor │ │
-│  │  /api/...   │  │ /api/generations│  │  GenerationRunner    │ │
-│  │             │  │  /{id}/stream  │  │                      │ │
-│  └─────────────┘  └────────────────┘  └──────────────────────┘ │
+│  ┌─────────────┐  ┌────────────────┐  ┌──────────────────────┐   │
+│  │  REST API   │  │   SSE Stream   │  │  Background Executor │   │
+│  │  /api/...   │  │ /api/generations│  │  GenerationRunner   │   │
+│  │             │  │  /{id}/stream  │  │                      │   │
+│  └─────────────┘  └────────────────┘  └──────────────────────┘   │
 │                                                                  │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │                  LangGraph Workflow                       │   │
-│  │                                                          │   │
-│  │  Router → [Research] → Orchestrator → [Workers×N] →     │   │
-│  │  Merge → ImagePlanner → ImageGen → Final                 │   │
-│  └──────────────────────────────────────────────────────────┘   │
+│  ┌──────────────────────────────────────────────────────────┐    │
+│  │                  LangGraph Workflow                      │    │
+│  │                                                          │    │
+│  │  Router → [Research] → Orchestrator → [Workers×N] →      │    │
+│  │  Merge → ImagePlanner → ImageGen → Final                 │    │
+│  └──────────────────────────────────────────────────────────┘    │
 │                                                                  │
-│  Services: Gemini · Tavily · Cloudinary · Pinecone              │
+│  Services: Gemini · Tavily · Cloudinary · Pinecone               │
 │  Database: SQLite (default) / PostgreSQL                         │
-└─────────────────────────────────────────────────────────────────┘
+└─────────────────────────────────────────────────────────────────-┘
 ```
 
 ### LangGraph Workflow Nodes

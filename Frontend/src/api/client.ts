@@ -12,6 +12,22 @@ export class ApiError extends Error {
   }
 }
 
+export function normalizeApiError(errorData: any, fallbackMessage: string): string {
+  if (typeof errorData?.detail === 'string') {
+    return errorData.detail;
+  }
+  if (Array.isArray(errorData?.detail)) {
+    // Pydantic validation error array
+    return errorData.detail
+      .map((err: any) => `${err.loc?.join('.') || 'field'}: ${err.msg}`)
+      .join(', ');
+  }
+  if (typeof errorData === 'string' && errorData.trim()) {
+    return errorData;
+  }
+  return fallbackMessage;
+}
+
 export async function apiClient<T>(
   endpoint: string,
   options: RequestInit = {}
@@ -37,17 +53,15 @@ export async function apiClient<T>(
 
       try {
         errorData = await response.json();
-        if (typeof errorData?.detail === 'string') {
-          errorDetail = errorData.detail;
-        } else if (Array.isArray(errorData?.detail)) {
-          // Pydantic validation error array
-          errorDetail = errorData.detail
-            .map((err: any) => `${err.loc?.join('.') || 'field'}: ${err.msg}`)
-            .join(', ');
-        }
+        errorDetail = normalizeApiError(errorData, errorDetail);
       } catch {
         // Response was not JSON
-        errorDetail = await response.text();
+        try {
+          const text = await response.text();
+          if (text) errorDetail = text;
+        } catch {
+          // ignore
+        }
       }
 
       throw new ApiError(errorDetail, response.status, errorData);

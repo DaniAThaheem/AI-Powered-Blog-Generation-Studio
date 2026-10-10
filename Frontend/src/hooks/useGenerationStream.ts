@@ -21,9 +21,26 @@ export function useGenerationStream({
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [lastEvent, setLastEvent] = useState<WorkflowEvent | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryCountRef = useRef(0);
   const maxRetries = 5;
   const queryClient = useQueryClient();
+
+  const onEventRef = useRef(onEvent);
+  const onCompleteRef = useRef(onComplete);
+  const onErrorRef = useRef(onError);
+
+  useEffect(() => {
+    onEventRef.current = onEvent;
+  }, [onEvent]);
+
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
+
+  useEffect(() => {
+    onErrorRef.current = onError;
+  }, [onError]);
 
   const connect = useCallback(() => {
     if (!enabled || !generationId) return;
@@ -41,7 +58,7 @@ export function useGenerationStream({
         try {
           const parsed: WorkflowEvent = JSON.parse(e.data);
           setLastEvent(parsed);
-          onEvent?.(parsed);
+          onEventRef.current?.(parsed);
 
           // Invalidate generations query cache to reflect changes
           queryClient.invalidateQueries({ queryKey: ['generation', generationId] });
@@ -52,12 +69,12 @@ export function useGenerationStream({
             es.close();
             // Refetch full generation record
             queryClient.refetchQueries({ queryKey: ['generation', generationId] }).then((res: any) => {
-              if (res.data) onComplete?.(res.data);
+              if (res.data) onCompleteRef.current?.(res.data);
             });
           } else if (parsed.event_type === 'failed') {
             setIsStreaming(false);
             es.close();
-            onError?.(parsed.message || 'Generation failed');
+            onErrorRef.current?.(parsed.message || 'Generation failed');
           }
         } catch (err) {
           console.error('Failed to parse SSE event data', err);
@@ -69,19 +86,19 @@ export function useGenerationStream({
         try {
           const parsed: WorkflowEvent = JSON.parse(e.data);
           setLastEvent(parsed);
-          onEvent?.(parsed);
+          onEventRef.current?.(parsed);
           queryClient.invalidateQueries({ queryKey: ['generation', generationId] });
 
           if (eventType === 'completed') {
             setIsStreaming(false);
             es.close();
             queryClient.refetchQueries({ queryKey: ['generation', generationId] }).then((res: any) => {
-              if (res.data) onComplete?.(res.data);
+              if (res.data) onCompleteRef.current?.(res.data);
             });
           } else if (eventType === 'failed') {
             setIsStreaming(false);
             es.close();
-            onError?.(parsed.message || 'Workflow stage failed');
+            onErrorRef.current?.(parsed.message || 'Workflow stage failed');
           }
         } catch (err) {
           console.error(`Error handling event ${eventType}`, err);
@@ -102,7 +119,10 @@ export function useGenerationStream({
           setIsReconnecting(true);
           const backoff = Math.min(1000 * Math.pow(2, retryCountRef.current), 10000) + Math.random() * 500;
           retryCountRef.current += 1;
-          setTimeout(() => {
+          if (reconnectTimeoutRef.current) {
+            clearTimeout(reconnectTimeoutRef.current);
+          }
+          reconnectTimeoutRef.current = setTimeout(() => {
             connect();
           }, backoff);
         } else {
@@ -115,7 +135,7 @@ export function useGenerationStream({
       console.error('SSE initialization error:', e);
       setIsStreaming(false);
     }
-  }, [generationId, enabled, onEvent, onComplete, onError, queryClient]);
+  }, [generationId, enabled, queryClient]);
 
   useEffect(() => {
     if (enabled && generationId) {
@@ -124,6 +144,10 @@ export function useGenerationStream({
     }
 
     return () => {
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
         eventSourceRef.current = null;
@@ -138,6 +162,10 @@ export function useGenerationStream({
     isReconnecting,
     lastEvent,
     disconnect: () => {
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
         eventSourceRef.current = null;

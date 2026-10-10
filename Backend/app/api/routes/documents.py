@@ -29,7 +29,11 @@ async def upload_document(
 ):
     """Upload reference document (PDF, TXT, MD), extract text, chunk, and index."""
     original_name = file.filename or "uploaded_file"
-    ext = Path(original_name).suffix.lower()
+    # Sanitize: strip directory components to prevent traversal attacks
+    safe_name = Path(original_name).name
+    if not safe_name or safe_name in (".", ".."):
+        safe_name = "uploaded_file"
+    ext = Path(safe_name).suffix.lower()
 
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
@@ -53,7 +57,7 @@ async def upload_document(
     # Save to storage directory
     doc_dir = Path(settings.STORAGE_DIR) / "documents"
     doc_dir.mkdir(parents=True, exist_ok=True)
-    stored_filename = f"{uuid.uuid4().hex[:8]}_{original_name}"
+    stored_filename = f"{uuid.uuid4().hex[:8]}_{safe_name}"
     target_path = doc_dir / stored_filename
     target_path.write_bytes(file_bytes)
 
@@ -61,7 +65,7 @@ async def upload_document(
     doc_record = await document_service.process_and_index_document(
         db=db,
         file_path=str(target_path.resolve()),
-        original_filename=original_name,
+        original_filename=safe_name,
         file_type=ext.replace(".", ""),
         file_size=file_size
     )

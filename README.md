@@ -151,8 +151,7 @@ POSTGRES_CHECKPOINT_URL=postgresql://user:pass@localhost:5432/blog_studio
 
 # ── App configuration ─────────────────────────────────────────────
 STORAGE_DIR=./storage
-MAX_UPLOAD_SIZE_MB=20
-ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
+CORS_ORIGINS=http://localhost:5173,http://localhost:3000
 DEBUG=false
 ```
 
@@ -296,31 +295,45 @@ Interactive docs: `http://localhost:8000/docs`
 
 ---
 
-## Known Limitations and Divergences
+## Before Deploying
 
-### No Authentication (MVP)
-The application has no user accounts or session-based access control. All data is shared globally. Add an auth layer (e.g. FastAPI-Users, JWT) before any production deployment.
+Before deploying this application to staging or production, address the following security considerations:
+
+1. **Authentication & Authorization**: The application currently has no user authentication, session management, or role-based access control. All generation history, uploaded reference documents, and configuration endpoints are open. Integrate an authentication layer (e.g. JWT, OAuth2, or FastAPI-Users) before public exposure.
+2. **Public `/api/storage` Mount**: Local files in `./storage` (including uploaded reference PDFs/documents and generated images) are mounted directly via `StaticFiles(directory=settings.STORAGE_DIR)`. In production, restrict access to uploaded documents via authenticated download endpoints or offload private assets to a secured object store (such as S3, GCS, or authenticated Cloudinary delivery).
+3. **CORS Restrictions**: Set `CORS_ORIGINS` in your production `.env` to your exact frontend domain(s) rather than localhost defaults.
+4. **Production Database & Checkpointer**: Switch `DATABASE_URL` from SQLite to PostgreSQL with `asyncpg`, and configure `POSTGRES_CHECKPOINT_URL` for resilient, multi-worker LangGraph thread checkpoints.
+
+---
+
+## Known Limitations and Design Decisions
+
+### Compiled LangGraph Execution & HITL
+The workflow executes the compiled StateGraph via `workflow.astream(..., stream_mode="updates")` with LangGraph checkpointer integration (`MemorySaver` by default, or `AsyncPostgresSaver`). Node updates are mapped to the 8 UI stages and streamed to clients via SSE. Parallel section generation uses LangGraph's dynamic `Send` fan-out. Human-In-The-Loop (HITL) review uses native LangGraph `interrupt()`, storing the pending plan in the thread checkpoint and resuming via `Command(resume=decision)`.
+
+### Startup Recovery & Vector Re-indexing
+- Any generation left in `running` state when the server terminates is automatically transitioned to `failed` on startup to prevent stale UI state.
+- In-memory vector stores are automatically re-indexed in a background task on server startup from persisted document chunks.
+- If a configured Pinecone index is missing or unreachable, the system logs a warning, falls back to in-memory cosine similarity, and surfaces the status in `/api/health`, `/api/settings`, and the Settings UI.
+
+### Segregated Embedding Spaces
+The application avoids mixing embedding vector spaces. When Gemini embeddings are active, failures will not silently mix fallback hash vectors into the index; instead, the document is marked `failed` with a retryable status. Document retrieval queries use single batched `IN` SQL queries rather than N+1 lookups.
+
+### Filename Sanitization & JSON Mutation Tracking
+- Uploaded filenames are sanitized using `Path(filename).name` to prevent directory traversal attacks.
+- All SQLAlchemy JSON columns (`stage_statuses`, `image_specs`, `warnings`, `metadata_json`) use `MutableDict` and `MutableList` so in-place mutations are tracked by the ORM unit-of-work.
 
 ### Chroma vs Pinecone
-The architecture diagrams reference **Chroma** as the vector store. The implementation uses **Pinecone** (per the project brief) with a full **in-memory cosine-similarity fallback** that activates automatically when `PINECONE_API_KEY` is not set. Chroma was not implemented.
+The architecture diagrams reference **Chroma** as the vector store. The implementation uses **Pinecone** with a full **in-memory cosine-similarity fallback** that activates automatically when `PINECONE_API_KEY` is not set.
 
-### LangGraph Execution Model
-The compiled LangGraph blog graph (`blog_graph.py`) exists and is correct, but `generation_runner.py` executes nodes sequentially in an async background task (not via `astream()`). This was a pragmatic choice to enable fine-grained SSE stage broadcasting per node. The fan-out workers still run concurrently via `asyncio.gather`.
-
-### Gemini Image Generation Model
-The application uses `gemini-3.1-flash-image` as the default image generation model via the Gemini API (`response_modalities=["IMAGE"]`). This is configurable via the `GEMINI_IMAGE_MODEL` environment variable.
-
-### State Reducer Fix
-The original `bwa.py` had `sections: Annotated[List[List[tuple[int, str]]], operator.add]` with workers returning `{"sections": [(task.id, section_md.text)]}`. This was corrected to use `List[Dict[str, Any]]` with structured `{id, title, content}` dicts, which the merge node sorts by `id` for deterministic ordering regardless of worker completion order.
-
-### npm Audit Vulnerabilities
-Running `npm audit` reports 15 vulnerabilities (7 moderate, 6 high, 2 critical) — all in **development dependencies** (`vitest`, `vite`, `tailwindcss`). Fixes require breaking major-version upgrades. These do **not** affect the production build or end users. Fix when upgrading the build toolchain:
-```powershell
-npm audit fix --force  # upgrades to vitest@5, vite@8, tailwindcss@4 (breaking changes)
-```
+### Gemini Models
+The application defaults to current Gemini models:
+- Text: `gemini-2.5-flash` (or `gemini-2.5-pro`)
+- Image: `gemini-3.1-flash-image` (via Gemini API `response_modalities=["IMAGE"]`)
+- Embeddings: `models/gemini-embedding-2`
 
 ### SQLite Default
-The application defaults to SQLite for zero-config local development. Set `DATABASE_URL` to a PostgreSQL connection string for production.
+The application defaults to SQLite with `aiosqlite` for zero-config local development. Set `DATABASE_URL` to a PostgreSQL connection string for production.
 
 ---
 

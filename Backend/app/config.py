@@ -1,6 +1,7 @@
-from typing import List, Optional
+import json
+from typing import List, Optional, Union, Any
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field
+from pydantic import Field, field_validator
 import os
 from pathlib import Path
 
@@ -11,12 +12,25 @@ class Settings(BaseSettings):
     DEBUG: bool = True
 
     # CORS
-    CORS_ORIGINS: List[str] = [
+    CORS_ORIGINS: Union[List[str], str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
     ]
+
+    @field_validator("CORS_ORIGINS", mode="after")
+    @classmethod
+    def assemble_cors_origins(cls, v: Any) -> List[str]:
+        if isinstance(v, str):
+            v_clean = v.strip()
+            if v_clean.startswith("[") and v_clean.endswith("]"):
+                try:
+                    return json.loads(v_clean)
+                except Exception:
+                    pass
+            return [x.strip() for x in v_clean.split(",") if x.strip()]
+        return v
 
     # Google Gemini
     GOOGLE_API_KEY: Optional[str] = Field(default=None, description="Google AI Studio API key")

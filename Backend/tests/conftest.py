@@ -48,12 +48,6 @@ async def override_get_db():
 
 app.dependency_overrides[session_module.get_db] = override_get_db
 
-@pytest_asyncio.fixture(scope="session")
-def event_loop():
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
-
 @pytest.fixture(scope="session", autouse=True)
 def cleanup_temp_db():
     yield

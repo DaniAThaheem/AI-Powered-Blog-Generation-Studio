@@ -73,8 +73,8 @@ export const SettingsView: React.FC = () => {
                   <Cpu className="w-4 h-4" />
                 </div>
                 <div>
-                  <h4 className="text-xs font-semibold text-text-primary">Google Gemini</h4>
-                  <p className="text-[10px] text-text-muted font-mono">{settings?.models?.text_model || 'gemini-1.5-flash'}</p>
+                  <h4 className="text-xs font-semibold text-text-primary">Large Language Model</h4>
+                  <p className="text-[10px] text-text-muted font-mono">{settings?.models?.text_model || 'gemini-flash-latest'}</p>
                 </div>
               </div>
               <span
